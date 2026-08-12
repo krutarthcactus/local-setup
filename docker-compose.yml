@@ -1,0 +1,224 @@
+name: scr-local
+
+# =============================================================================
+# SCR Platform — Local Development Stack
+# =============================================================================
+# Single entry point: http://local.scr.com/  (add "127.0.0.1 local.scr.com"
+# to /etc/hosts first — see README.md)
+#
+#   /                  -> frontend  (React 18 + Vite dev server, HMR enabled)
+#   /api/*             -> backend   (Laravel 13 / PHP 8.4 via php-fpm)
+#   /broadcasting/*     -> reverb    (Laravel Reverb WebSocket server)
+#
+# Source code is bind-mounted from sibling repos (see .env BACKEND_PATH /
+# FRONTEND_PATH) so edits on the host reflect instantly — no rebuild needed
+# for PHP or JS/TS source changes.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # nginx — single reverse-proxy entry point for local.scr.com
+  # ---------------------------------------------------------------------------
+  nginx:
+    build: ./nginx
+    container_name: scr-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+      - reverb
+    networks:
+      - scr-local
+
+  # ---------------------------------------------------------------------------
+  # frontend — React 18 + Vite dev server (auto-bootstrapped if empty)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build: ./node
+    container_name: scr-frontend
+    restart: unless-stopped
+    environment:
+      AUTO_BOOTSTRAP: "${AUTO_BOOTSTRAP:-true}"
+      APP_DOMAIN: "${APP_DOMAIN:-local.scr.com}"
+      NEXT_PUBLIC_API_BASE_URL: "http://${APP_DOMAIN:-local.scr.com}/api"
+      NEXT_PUBLIC_REVERB_HOST: "${APP_DOMAIN:-local.scr.com}"
+      NEXT_PUBLIC_REVERB_PORT: "80"
+      NEXT_PUBLIC_REVERB_SCHEME: "http"
+      CHOKIDAR_USEPOLLING: "true" # reliable file-watching across bind mounts
+    volumes:
+      - ${FRONTEND_PATH:-../../scr-frontend}:/app
+      - frontend_node_modules:/app/node_modules
+    networks:
+      - scr-local
+    # Not published to the host on purpose — everything routes through
+    # nginx at http://local.scr.com/ (no separate port needed). Uncomment
+    # below only if you want to hit the Vite server directly for debugging.
+    # ports:
+    #   - "${VITE_PORT:-5173}:5173"
+
+  # ---------------------------------------------------------------------------
+  # websocket — Node.js 24 + TypeScript + Socket.io server
+  # ---------------------------------------------------------------------------
+  websocket:
+    build: ./websocket
+    container_name: scr-websocket
+    restart: unless-stopped
+    environment:
+      AUTO_BOOTSTRAP: "${AUTO_BOOTSTRAP:-true}"
+      NODE_ENV: "${NODE_ENV:-development}"
+      WEBSOCKET_PORT: "3000"
+      WEBSOCKET_HOST: "0.0.0.0"
+    volumes:
+      - ${WEBSOCKET_PATH:-../../scr-websocket}:/app
+      - websocket_node_modules:/app/node_modules
+    networks:
+      - scr-local
+    ports:
+      - "${WEBSOCKET_PORT:-3000}:3000"
+
+  # ---------------------------------------------------------------------------
+  # backend — Laravel 13 / PHP 8.4-fpm (auto-bootstrapped if empty)
+  # ---------------------------------------------------------------------------
+  backend:
+    build: ./php
+    container_name: scr-backend
+    restart: unless-stopped
+    environment: &backend-env
+      AUTO_BOOTSTRAP: "${AUTO_BOOTSTRAP:-true}"
+      APP_DOMAIN: "${APP_DOMAIN:-local.scr.com}"
+      POSTGRES_DB: "${POSTGRES_DB:-scr_platform}"
+      POSTGRES_USER: "${POSTGRES_USER:-scr}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-scr_local_password}"
+      REVERB_APP_ID: "${REVERB_APP_ID:-scr-local}"
+      REVERB_APP_KEY: "${REVERB_APP_KEY:-scr-local-key}"
+      REVERB_APP_SECRET: "${REVERB_APP_SECRET:-scr-local-secret}"
+    volumes:
+      - ${BACKEND_PATH:-../../scr-backend}:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+      - ./logs/php:/var/log/php
+      - ./php/php.ini:/usr/local/etc/php/conf.d/zz-local-overrides.ini:ro
+      - ./php/fpm-pool.conf:/usr/local/etc/php-fpm.d/zz-local-overrides.conf:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - scr-local
+    # php-fpm listens on 9000 internally; nginx reaches it via fastcgi_pass
+    # backend:9000 — no host port needed.
+
+  # ---------------------------------------------------------------------------
+  # queue — dedicated worker so reminders/reports/ingestion jobs actually
+  # process (SOW §3.4/3.5 reminders, §3.3 ingestion, §5 report generation)
+  # ---------------------------------------------------------------------------
+  queue:
+    build: ./php
+    container_name: scr-queue
+    restart: unless-stopped
+    command: ["php", "artisan", "queue:work", "--tries=3", "--verbose"]
+    environment: *backend-env
+    volumes:
+      - ${BACKEND_PATH:-../../scr-backend}:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+      - ./logs/php:/var/log/php
+      - ./php/php.ini:/usr/local/etc/php/conf.d/zz-local-overrides.ini:ro
+    depends_on:
+      - backend
+    networks:
+      - scr-local
+
+  # ---------------------------------------------------------------------------
+  # reverb — Laravel Reverb WebSocket server (real-time comment sync, §2.4/§3.6)
+  # ---------------------------------------------------------------------------
+  reverb:
+    build: ./php
+    container_name: scr-reverb
+    restart: unless-stopped
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    environment: *backend-env
+    volumes:
+      - ${BACKEND_PATH:-../../scr-backend}:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+      - ./logs/php:/var/log/php
+      - ./php/php.ini:/usr/local/etc/php/conf.d/zz-local-overrides.ini:ro
+    depends_on:
+      - backend
+    networks:
+      - scr-local
+    # Reverb listens on 8080 internally; nginx reaches it via proxy_pass
+    # reverb:8080 for the /broadcasting/ location — no host port needed.
+
+  # ---------------------------------------------------------------------------
+  # postgres — PostgreSQL 14 (matches SOW §2.3 exactly)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:14-alpine
+    container_name: scr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-scr_platform}"
+      POSTGRES_USER: "${POSTGRES_USER:-scr}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-scr_local_password}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scr} -d ${POSTGRES_DB:-scr_platform}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scr-local
+
+  # ---------------------------------------------------------------------------
+  # redis — cache, session, and queue driver (SOW §3.4/3.5)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: scr-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - scr-local
+
+  # ---------------------------------------------------------------------------
+  # mailpit — catches all local outbound mail (invitations, reminders, §3.5)
+  # ---------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: scr-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025" # SMTP — Laravel MAIL_HOST=mailpit MAIL_PORT=1025
+      - "${MAILPIT_UI_PORT:-8025}:8025"   # Web UI — http://localhost:8025
+    networks:
+      - scr-local
+
+networks:
+  scr-local:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_vendor:
+  frontend_node_modules:
+  websocket_node_modules:
