@@ -44,7 +44,7 @@ if [ "${AUTO_BOOTSTRAP:-true}" = "true" ] && [ ! -f "$APP_DIR/package.json" ]; t
     log "Installing Tanstack Query,  Socket.io client..."
     npm install \
         @tanstack/react-query \
-        socket.io-client \
+        socket.io-client
 fi
 
 if [ ! -f "$APP_DIR/package.json" ]; then
