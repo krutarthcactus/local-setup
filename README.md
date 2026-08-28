@@ -7,7 +7,7 @@ mail catcher — all wired together and reachable at a single URL:
 **http://local.scr.com/**
 
 No ports in the browser bar. `/` serves the  Next.js app, `/api/*` serves the
-Laravel API, `/broadcasting/*` serves the WebSocket (real-time comment sync).
+Laravel API.
 
 ---
 
@@ -19,7 +19,6 @@ Laravel API, `/broadcasting/*` serves the WebSocket (real-time comment sync).
 | `frontend` | Next.js 16 dev server (HMR enabled)           | via nginx `/` |
 | `backend`  | Laravel 13 on PHP 8.4-fpm                     | via nginx `/api/*` |
 | `queue`    | `php artisan queue:work` — processes reminders, reports, ingestion jobs | — |
-| `reverb`   | Laravel Reverb WebSocket server (real-time comments) | via nginx `/broadcasting/*` |
 | `websocket` | Node.js 24 + TypeScript + Socket.io server   | `localhost:3000` |
 | `postgres` | PostgreSQL 14 (matches SOW §2.3)              | `localhost:5432` |
 | `redis`    | Cache / session / queue driver                | `localhost:6379` |
@@ -112,7 +111,7 @@ make up
 ```
 
 **First boot does a lot of work automatically:**
--- If `scr-backend/` is empty → runs `composer create-project laravel/laravel:^13.0`, adds `laravel/reverb` + `laravel/sanctum`, generates `.env`, wires DB/Redis/Mail/Reverb config, generates `APP_KEY`, waits for Postgres, runs migrations.
+-- If `scr-backend/` is empty → runs `composer create-project laravel/laravel:^13.0`, adds `laravel/sanctum`, generates `.env`, wires DB/Redis/Mail config, generates `APP_KEY`, waits for Postgres, runs migrations.
 -- If `scr-frontend/` is empty → runs `npx create-next-app@latest` with TypeScript, Tailwind, ESLint, App Router, installs Tanstack Query, Radix UI components, Socket.io client, and creates `.env.local` with environment variables for the Next.js app.
 -- If `scr-websocket/` is empty → creates a Node.js 24 + TypeScript project with Socket.io, configures dev environment with `tsx`, and creates a basic WebSocket server with chat/message event handling.
 
@@ -217,7 +216,7 @@ tail -f local-docker/logs/php/fpm-error.log
 ```
 
 Laravel's own application log needs no extra plumbing at all: since the
-**entire** `scr-backend` repo is bind-mounted into the backend/queue/reverb
+**entire** `scr-backend` repo is bind-mounted into the backend/queue
 containers, `storage/logs/laravel.log` is already a normal file on your host
 the moment Laravel writes it:
 

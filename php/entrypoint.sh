@@ -7,11 +7,11 @@
 #      (only when AUTO_BOOTSTRAP=true)
 #   2. composer install (idempotent — skipped if vendor/ already populated
 #      and composer.lock hasn't changed)
-#   3. Wire up .env to point at the postgres/redis/mailpit/reverb services
+#   3. Wire up .env to point at the postgres/redis/mailpit services
 #   4. Wait for PostgreSQL to accept connections
 #   5. Run migrations (only from the primary "php-fpm" container, to avoid
-#      the queue/reverb sidecars racing each other on first boot)
-#   6. Hand off to the real process (php-fpm, queue:work, or reverb:start)
+#      the queue sidecar racing on first boot)
+#   6. Hand off to the real process (php-fpm or queue:work)
 # =============================================================================
 
 set -e
@@ -24,7 +24,7 @@ log() { echo "[entrypoint] $*scr"; }
 # -----------------------------------------------------------------------------
 # 0. Single-flight lock
 # -----------------------------------------------------------------------------
-# backend, queue, and reverb all bind-mount the SAME code directory and all
+# backend and queue both bind-mount the SAME code directory and all
 # start at roughly the same time on every `docker compose up`. Without a
 # lock, they'd race on `composer create-project` / `composer install` /
 # writing .env simultaneously and corrupt each other's work (this is not
@@ -68,14 +68,10 @@ if [ ! -f "$DONE_FILE" ]; then
             shopt -u dotglob
             log "Laravel 13 scaffold created."
 
-            # Add packages required by the SOW tech stack (§2.1, §2.4) that
-            # aren't in the default skeleton: Reverb (WebSocket) and Sanctum
-            # (API auth).
-            log "Installing laravel/reverb and laravel/sanctum..."
-            composer require laravel/reverb laravel/sanctum --no-interaction
-
-            log "Publishing Reverb config..."
-            php artisan reverb:install --no-interaction || true
+            # Add packages required by the SOW tech stack (§2.1) that
+            # aren't in the default skeleton: Sanctum (API auth).
+            log "Installing laravel/sanctum..."
+            composer require laravel/sanctum --no-interaction
         fi
 
         if [ ! -f "$APP_DIR/artisan" ]; then
@@ -128,17 +124,6 @@ if [ ! -f "$DONE_FILE" ]; then
         set_env QUEUE_CONNECTION redis
         set_env REDIS_HOST redis
         set_env REDIS_PORT 6379
-
-        set_env BROADCAST_CONNECTION reverb
-        set_env REVERB_APP_ID "${REVERB_APP_ID:-scr-local}"
-        set_env REVERB_APP_KEY "${REVERB_APP_KEY:-scr-local-key}"
-        set_env REVERB_APP_SECRET "${REVERB_APP_SECRET:-scr-local-secret}"
-        set_env REVERB_HOST "0.0.0.0"
-        set_env REVERB_PORT 8080
-        set_env REVERB_SCHEME http
-        set_env VITE_REVERB_HOST "${APP_DOMAIN:-local.scr.com}"
-        set_env VITE_REVERB_PORT 80
-        set_env VITE_REVERB_SCHEME http
 
         set_env MAIL_MAILER smtp
         set_env MAIL_HOST mailpit
@@ -200,9 +185,9 @@ log "PostgreSQL is ready."
 
 # -----------------------------------------------------------------------------
 # 5. Migrations — same single-flight pattern as step 0. Whichever of
-#    backend/queue/reverb gets here FIRST runs the migration; the others
-#    wait for it, so queue:work / reverb:start never race ahead of a DB
-#    schema that isn't ready yet.
+#    backend/queue gets here FIRST runs the migration; the others
+#    wait for it, so queue:work never races ahead of a DB schema that isn't
+#    ready yet.
 # -----------------------------------------------------------------------------
 MIGRATE_LOCK_DIR="$APP_DIR/.docker-migrate.lock"
 MIGRATE_DONE_FILE="$APP_DIR/.docker-migrate.done"

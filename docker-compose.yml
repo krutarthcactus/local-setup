@@ -8,7 +8,6 @@ name: scr-local
 #
 #   /                  -> frontend  (React 18 + Vite dev server, HMR enabled)
 #   /api/*             -> backend   (Laravel 13 / PHP 8.4 via php-fpm)
-#   /broadcasting/*     -> reverb    (Laravel Reverb WebSocket server)
 #
 # Source code is bind-mounted from sibling repos (see .env BACKEND_PATH /
 # FRONTEND_PATH) so edits on the host reflect instantly — no rebuild needed
@@ -32,7 +31,6 @@ services:
     depends_on:
       - frontend
       - backend
-      - reverb
     networks:
       - scr-local
 
@@ -47,9 +45,6 @@ services:
       AUTO_BOOTSTRAP: "${AUTO_BOOTSTRAP:-true}"
       APP_DOMAIN: "${APP_DOMAIN:-local.scr.com}"
       NEXT_PUBLIC_API_BASE_URL: "http://${APP_DOMAIN:-local.scr.com}/api"
-      NEXT_PUBLIC_REVERB_HOST: "${APP_DOMAIN:-local.scr.com}"
-      NEXT_PUBLIC_REVERB_PORT: "80"
-      NEXT_PUBLIC_REVERB_SCHEME: "http"
       CHOKIDAR_USEPOLLING: "true" # reliable file-watching across bind mounts
     volumes:
       - ${FRONTEND_PATH:-../../scr-frontend}:/app
@@ -95,9 +90,6 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-scr_platform}"
       POSTGRES_USER: "${POSTGRES_USER:-scr}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-scr_local_password}"
-      REVERB_APP_ID: "${REVERB_APP_ID:-scr-local}"
-      REVERB_APP_KEY: "${REVERB_APP_KEY:-scr-local-key}"
-      REVERB_APP_SECRET: "${REVERB_APP_SECRET:-scr-local-secret}"
     volumes:
       - ${BACKEND_PATH:-../../scr-backend}:/var/www/html
       - backend_vendor:/var/www/html/vendor
@@ -133,27 +125,6 @@ services:
       - backend
     networks:
       - scr-local
-
-  # ---------------------------------------------------------------------------
-  # reverb — Laravel Reverb WebSocket server (real-time comment sync, §2.4/§3.6)
-  # ---------------------------------------------------------------------------
-  reverb:
-    build: ./php
-    container_name: scr-reverb
-    restart: unless-stopped
-    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
-    environment: *backend-env
-    volumes:
-      - ${BACKEND_PATH:-../../scr-backend}:/var/www/html
-      - backend_vendor:/var/www/html/vendor
-      - ./logs/php:/var/log/php
-      - ./php/php.ini:/usr/local/etc/php/conf.d/zz-local-overrides.ini:ro
-    depends_on:
-      - backend
-    networks:
-      - scr-local
-    # Reverb listens on 8080 internally; nginx reaches it via proxy_pass
-    # reverb:8080 for the /broadcasting/ location — no host port needed.
 
   # ---------------------------------------------------------------------------
   # postgres — PostgreSQL 14 (matches SOW §2.3 exactly)

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help up down restart build fresh logs logs-nginx logs-backend logs-frontend logs-queue logs-reverb \
+.PHONY: help up down restart build fresh logs logs-nginx logs-backend logs-frontend logs-queue \
         logs-websocket ps shell-backend shell-frontend shell-websocket artisan npm npm-websocket migrate migrate-fresh \
         tinker mailpit psql redis-cli hosts-check hosts-add up-only-websocket down-only-websocket
 
@@ -55,9 +55,6 @@ logs-frontend: ## Tail frontend (Vite) logs
 
 logs-queue: ## Tail queue worker logs
 	docker compose logs -f queue
-
-logs-reverb: ## Tail Reverb (WebSocket) logs
-	docker compose logs -f reverb
 
 logs-websocket: ## Tail websocket (Node.js + Socket.io) logs
 	docker compose logs -f websocket

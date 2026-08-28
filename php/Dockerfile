@@ -34,7 +34,7 @@ RUN apk add --no-cache \
 #   bcmath      -> precise numeric handling
 #   intl        -> locale/formatting
 #   opcache     -> performance
-#   pcntl/sockets -> Reverb WebSocket server (§2.4)
+#   pcntl/sockets -> WebSocket support
 # -----------------------------------------------------------------------------
 RUN docker-php-ext-configure gd --with-jpeg --with-freetype \
     && docker-php-ext-install -j$(nproc) \
@@ -60,7 +60,7 @@ WORKDIR /var/www/html
 
 # Entrypoint handles bootstrap-if-missing, composer install, key:generate,
 # waiting for postgres, and running migrations before handing off to the
-# actual process (php-fpm, queue:work, or reverb:start — see docker-compose).
+# actual process (php-fpm or queue:work — see docker-compose).
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
