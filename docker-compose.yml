@@ -90,6 +90,13 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-scr_platform}"
       POSTGRES_USER: "${POSTGRES_USER:-scr}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-scr_local_password}"
+      # AWS S3 / Floci configuration
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-test}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-test}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_BUCKET: "${AWS_BUCKET:-scr-local-bucket}"
+      AWS_ENDPOINT: "${AWS_ENDPOINT:-http://floci:4566}"
+      AWS_USE_PATH_STYLE_ENDPOINT: "${AWS_USE_PATH_STYLE_ENDPOINT:-true}"
     volumes:
       - ${BACKEND_PATH:-../../scr-backend}:/var/www/html
       - backend_vendor:/var/www/html/vendor
@@ -100,6 +107,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      floci:
         condition: service_healthy
     networks:
       - scr-local
@@ -183,6 +192,34 @@ services:
     networks:
       - scr-local
 
+  # ---------------------------------------------------------------------------
+  # floci — AWS S3-compatible storage (all 75 AWS services on port 4566)
+  # ---------------------------------------------------------------------------
+  floci:
+    image: floci/floci:latest
+    container_name: scr-floci
+    restart: unless-stopped
+    ports:
+      - "${FLOCI_PORT:-4566}:4566"
+    volumes:
+      # Docker socket required by Floci for service emulation
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci_data:/app/data
+    environment:
+      FLOCI_STORAGE_MODE: "${FLOCI_STORAGE_MODE:-hybrid}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-test}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-test}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_BUCKET: "${AWS_BUCKET:-scr-local-bucket}"
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/localhost/4566' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - scr-local
+
 networks:
   scr-local:
     driver: bridge
@@ -193,3 +230,4 @@ volumes:
   backend_vendor:
   frontend_node_modules:
   websocket_node_modules:
+  floci_data:

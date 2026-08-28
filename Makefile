@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build fresh logs logs-nginx logs-backend logs-frontend logs-queue \
-        logs-websocket ps shell-backend shell-frontend shell-websocket artisan npm npm-websocket migrate migrate-fresh \
-        tinker mailpit psql redis-cli hosts-check hosts-add up-only-websocket down-only-websocket
+        logs-websocket logs-floci ps shell-backend shell-frontend shell-websocket artisan npm npm-websocket migrate migrate-fresh \
+        tinker mailpit psql redis-cli hosts-check hosts-add s3-init s3-list s3-test up-only-websocket down-only-websocket
 
 
 # =============================================================================
@@ -103,6 +103,33 @@ hosts-check: ## Check whether local.scr.com is mapped in /etc/hosts
 
 hosts-add: ## Add local.scr.com to /etc/hosts (prompts for sudo)
 	@grep -q "local.scr.com" /etc/hosts && echo "Already present." || (echo "127.0.0.1 local.scr.com" | sudo tee -a /etc/hosts && echo "✅ Added.")
+
+# =============================================================================
+# AWS S3 / Floci management
+# =============================================================================
+
+s3-init: ## Create S3 bucket (run once after first startup)
+	@echo "Creating S3 bucket..."
+	@docker run --rm --network scr-local_scr-local \
+		-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID:-test} \
+		-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY:-test} \
+		-e AWS_DEFAULT_REGION=$${AWS_DEFAULT_REGION:-us-east-1} \
+		amazon/aws-cli --endpoint-url=http://floci:4566 \
+		s3 mb s3://$${AWS_BUCKET:-scr-local-bucket} 2>&1 | grep -v "BucketAlreadyOwnedByYou" || echo "✅ Bucket ready"
+
+s3-list: ## List all S3 buckets
+	@docker run --rm --network scr-local_scr-local \
+		-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID:-test} \
+		-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY:-test} \
+		-e AWS_DEFAULT_REGION=$${AWS_DEFAULT_REGION:-us-east-1} \
+		amazon/aws-cli --endpoint-url=http://floci:4566 s3 ls
+
+s3-test: ## Test S3 upload/download/delete
+	@echo "Testing S3 operations..."
+	@docker compose exec backend php artisan tinker --execute="Storage::disk('s3')->put('test.txt', 'Hello from SCR Platform!'); echo 'Upload: ✅'; echo Storage::disk('s3')->get('test.txt'); echo '\nDownload: ✅'; Storage::disk('s3')->delete('test.txt'); echo 'Delete: ✅';"
+
+logs-floci: ## Tail Floci (AWS S3) logs
+	docker compose logs -f floci
 
 # =============================================================================
 # Run only specific services

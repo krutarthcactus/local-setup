@@ -22,6 +22,7 @@ Laravel API.
 | `websocket` | Node.js 24 + TypeScript + Socket.io server   | `localhost:3000` |
 | `postgres` | PostgreSQL 14 (matches SOW §2.3)              | `localhost:5432` |
 | `redis`    | Cache / session / queue driver                | `localhost:6379` |
+| `floci`    | AWS S3-compatible storage (all 75 AWS services) | `localhost:4566` |
 | `mailpit`  | Catches every outbound email locally — no real SES/Brevo needed | `http://localhost:8025` |
 
 ---
@@ -131,6 +132,7 @@ Once containers report healthy:
 - **Mailpit (catches all local email):** http://localhost:8025
 - **Postgres:** `localhost:5432` (user/db from `.env`, default `scr` / `scr_platform`)
 - **Redis:** `localhost:6379`
+- **Floci (AWS S3):** `http://localhost:4566` (S3-compatible storage)
 
 ---
 
@@ -200,6 +202,110 @@ SOW §3.5) is caught by Mailpit instead of actually being delivered:
 ```bash
 make mailpit      # opens http://localhost:8025 in your browser
 ```
+
+### AWS S3 / Floci file storage
+
+Floci provides a local AWS S3-compatible storage service, eliminating the need
+for a real AWS account during development. Laravel can upload, download, delete,
+and manage files using the S3 disk exactly as it would with real AWS S3.
+
+#### Setup
+
+**1. Configure Laravel filesystem** (in `scr-backend/.env`, **not** `local-docker/.env`):
+
+> **Note:** Laravel reads from its own `.env` file in the `scr-backend/` directory. The AWS environment variables in `docker-compose.yml` are for shell/CLI convenience only.
+
+```bash
+FILESYSTEM_DISK=s3
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET=scr-local-bucket
+AWS_ENDPOINT=http://floci:4566
+AWS_USE_PATH_STYLE_ENDPOINT=true
+```
+
+**2. Install AWS SDK** (if not already installed):
+
+```bash
+make shell-backend
+composer require league/flysystem-aws-s3-v3 "^3.0" --with-all-dependencies
+```
+
+**3. Initialize the S3 bucket**:
+
+```bash
+make s3-init      # creates the bucket (run once after first startup)
+```
+
+> **Note:** This only needs to be run once. The bucket persists in the `floci_data` Docker volume.
+
+#### Testing S3 operations
+
+**Test upload/download/delete:**
+
+```bash
+make s3-test      # runs a full S3 test cycle
+```
+
+**List all buckets:**
+
+```bash
+make s3-list
+```
+
+**View Floci logs:**
+
+```bash
+make logs-floci
+```
+
+#### Using S3 in Laravel code
+
+Once configured, use Laravel's Storage facade as normal:
+
+```php
+use Illuminate\Support\Facades\Storage;
+
+// Upload a file
+Storage::disk('s3')->put('documents/report.pdf', $fileContents);
+
+// Upload from uploaded file
+Storage::disk('s3')->putFileAs(
+    'uploads',
+    $request->file('document'),
+    'original-filename.pdf'
+);
+
+// Download/read a file
+$contents = Storage::disk('s3')->get('documents/report.pdf');
+
+// Get public URL (works with Floci)
+$url = Storage::disk('s3')->url('documents/report.pdf');
+
+// Check if file exists
+if (Storage::disk('s3')->exists('documents/report.pdf')) {
+    // ...
+}
+
+// Delete a file
+Storage::disk('s3')->delete('documents/report.pdf');
+
+// List files in a directory
+$files = Storage::disk('s3')->files('documents');
+$allFiles = Storage::disk('s3')->allFiles('documents'); // recursive
+
+// Get file metadata
+$size = Storage::disk('s3')->size('documents/report.pdf');
+$lastModified = Storage::disk('s3')->lastModified('documents/report.pdf');
+```
+
+#### Important notes
+
+- The default bucket name is `scr-local-bucket` (configurable via `AWS_BUCKET` in `.env`)
+- Floci data persists in a Docker volume, surviving container restarts
+- S3 endpoint is accessible from both Laravel containers (`backend` and `queue`)
+- For production, simply update the `.env` to use real AWS credentials and remove the `AWS_ENDPOINT` variable
 
 ---
 
