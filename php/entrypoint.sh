@@ -98,50 +98,6 @@ if [ ! -f "$DONE_FILE" ]; then
             cp .env.example .env
         fi
 
-        set_env() {
-            local key="$1" value="$2"
-            if grep -qE "^${key}=" .env; then
-                sed -i "s|^${key}=.*|${key}=${value}|" .env
-            else
-                echo "${key}=${value}" >> .env
-            fi
-        }
-
-        log "Wiring .env to local Docker services..."
-        set_env APP_URL "http://${APP_DOMAIN:-local.scr.com}"
-        set_env APP_ENV local
-        set_env APP_DEBUG true
-
-        set_env DB_CONNECTION pgsql
-        set_env DB_HOST postgres
-        set_env DB_PORT 5432
-        set_env DB_DATABASE "${POSTGRES_DB:-ďplatform}"
-        set_env DB_USERNAME "${POSTGRES_USER:-scr}"
-        set_env DB_PASSWORD "${POSTGRES_PASSWORD:-scr_local_password}"
-
-        set_env CACHE_STORE redis
-        set_env SESSION_DRIVER redis
-        set_env QUEUE_CONNECTION redis
-        set_env REDIS_HOST redis
-        set_env REDIS_PORT 6379
-
-        set_env MAIL_MAILER smtp
-        set_env MAIL_HOST mailpit
-        set_env MAIL_PORT 1025
-        set_env MAIL_USERNAME null
-        set_env MAIL_PASSWORD null
-        set_env MAIL_ENCRYPTION null
-        set_env MAIL_FROM_ADDRESS "no-reply@local.scr.com"
-
-        set_env FRONTEND_URL "http://${APP_DOMAIN:-local.scr.com}"
-        set_env SANCTUM_STATEFUL_DOMAINS "${APP_DOMAIN:-local.scr.com}"
-        set_env SESSION_DOMAIN ".${APP_DOMAIN:-local.scr.com}"
-
-        if ! grep -q "^APP_KEY=base64" .env 2>/dev/null; then
-            log "Generating APP_KEY..."
-            php artisan key:generate --ansi --force
-        fi
-
         touch "$DONE_FILE"
         rmdir "$LOCK_DIR"
         log "Setup complete — lock released."
@@ -165,6 +121,17 @@ if [ ! -f "$APP_DIR/artisan" ]; then
     log "ERROR: no artisan file found and AUTO_BOOTSTRAP is disabled."
     log "Either set AUTO_BOOTSTRAP=true or create the Laravel app manually at ${SCR_BACKEND_PATH}."
     exec "$@"
+fi
+
+# Ensure .env and APP_KEY are set (runs for all containers, including cloned projects)
+if [ ! -f "$APP_DIR/.env" ]; then
+    log "No .env found — copying .env.example..."
+    cp .env.example .env
+fi
+
+if ! grep -q "^APP_KEY=base64" .env 2>/dev/null; then
+    log "Generating APP_KEY..."
+    php artisan key:generate --ansi --force
 fi
 
 # -----------------------------------------------------------------------------
