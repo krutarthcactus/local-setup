@@ -108,25 +108,15 @@ hosts-add: ## Add local.scr.com to /etc/hosts (prompts for sudo)
 # AWS S3 / Floci management
 # =============================================================================
 
-s3-init: ## Create S3 bucket (run once after first startup)
-	@echo "Creating S3 bucket..."
-	@docker run --rm --network scr-local_scr-local \
-		-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID:-test} \
-		-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY:-test} \
-		-e AWS_DEFAULT_REGION=$${AWS_DEFAULT_REGION:-us-east-1} \
-		amazon/aws-cli --endpoint-url=http://floci:4566 \
-		s3 mb s3://$${AWS_BUCKET:-scr-local-bucket} 2>&1 | grep -v "BucketAlreadyOwnedByYou" || echo "✅ Bucket ready"
+s3-init: ## Create S3 buckets (run once after first startup)
+	@./scripts/s3-init.sh
 
 s3-list: ## List all S3 buckets
-	@docker run --rm --network scr-local_scr-local \
-		-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID:-test} \
-		-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY:-test} \
-		-e AWS_DEFAULT_REGION=$${AWS_DEFAULT_REGION:-us-east-1} \
-		amazon/aws-cli --endpoint-url=http://floci:4566 s3 ls
+	@./scripts/s3-list.sh
 
-s3-test: ## Test S3 upload/download/delete
+s3-test: ## Test S3 upload/download/delete on both buckets
 	@echo "Testing S3 operations..."
-	@docker compose exec backend php artisan tinker --execute="Storage::disk('s3')->put('test.txt', 'Hello from SCR Platform!'); echo 'Upload: ✅'; echo Storage::disk('s3')->get('test.txt'); echo '\nDownload: ✅'; Storage::disk('s3')->delete('test.txt'); echo 'Delete: ✅';"
+	@docker compose exec backend php artisan tinker --execute="Storage::disk('s3-private')->put('test.txt', 'Hello from SCR Platform!'); echo 'Private Upload: ✅'; echo Storage::disk('s3-private')->get('test.txt'); echo '\nPrivate Download: ✅'; Storage::disk('s3-private')->delete('test.txt'); echo 'Private Delete: ✅'; Storage::disk('s3-public')->put('test.txt', 'Hello from SCR Platform!'); echo '\nPublic Upload: ✅'; echo Storage::disk('s3-public')->get('test.txt'); echo '\nPublic Download: ✅'; Storage::disk('s3-public')->delete('test.txt'); echo 'Public Delete: ✅';"
 
 logs-floci: ## Tail Floci (AWS S3) logs
 	docker compose logs -f floci

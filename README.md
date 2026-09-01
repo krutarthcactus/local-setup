@@ -220,10 +220,18 @@ FILESYSTEM_DISK=s3
 AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
 AWS_DEFAULT_REGION=us-east-1
-AWS_BUCKET=scr-local-bucket
+
+# Private bucket for sensitive files (documents, reports, compliance data)
+AWS_BUCKET_PRIVATE=scr-private-bucket
+
+# Public bucket for user-uploaded content (avatars, public files)
+AWS_BUCKET_PUBLIC=scr-public-bucket
+
 AWS_ENDPOINT=http://floci:4566
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
+
+> **Tip:** Bucket names are configured in `local-docker/.env` and automatically passed to the backend service.
 
 **2. Install AWS SDK** (if not already installed):
 
@@ -232,20 +240,30 @@ make shell-backend
 composer require league/flysystem-aws-s3-v3 "^3.0" --with-all-dependencies
 ```
 
-**3. Initialize the S3 bucket**:
+**3. Initialize the S3 buckets** (run once after first startup):
 
 ```bash
-make s3-init      # creates the bucket (run once after first startup)
+make s3-init
 ```
 
-> **Note:** This only needs to be run once. The bucket persists in the `floci_data` Docker volume.
+This creates two buckets:
+- `scr-private-bucket` - For sensitive files (documents, reports, etc.)
+- `scr-public-bucket` - For publicly accessible content (user uploads, avatars, etc.)
 
-#### Testing S3 operations
+Buckets persist in the `floci_data` Docker volume.
+
+#### Managing S3 buckets
+
+**List all buckets:**
+
+```bash
+make s3-list
+```
 
 **Test upload/download/delete:**
 
 ```bash
-make s3-test      # runs a full S3 test cycle
+make s3-test      # tests both private and public buckets
 ```
 
 **List all buckets:**
@@ -260,49 +278,9 @@ make s3-list
 make logs-floci
 ```
 
-#### Using S3 in Laravel code
-
-Once configured, use Laravel's Storage facade as normal:
-
-```php
-use Illuminate\Support\Facades\Storage;
-
-// Upload a file
-Storage::disk('s3')->put('documents/report.pdf', $fileContents);
-
-// Upload from uploaded file
-Storage::disk('s3')->putFileAs(
-    'uploads',
-    $request->file('document'),
-    'original-filename.pdf'
-);
-
-// Download/read a file
-$contents = Storage::disk('s3')->get('documents/report.pdf');
-
-// Get public URL (works with Floci)
-$url = Storage::disk('s3')->url('documents/report.pdf');
-
-// Check if file exists
-if (Storage::disk('s3')->exists('documents/report.pdf')) {
-    // ...
-}
-
-// Delete a file
-Storage::disk('s3')->delete('documents/report.pdf');
-
-// List files in a directory
-$files = Storage::disk('s3')->files('documents');
-$allFiles = Storage::disk('s3')->allFiles('documents'); // recursive
-
-// Get file metadata
-$size = Storage::disk('s3')->size('documents/report.pdf');
-$lastModified = Storage::disk('s3')->lastModified('documents/report.pdf');
-```
-
 #### Important notes
 
-- The default bucket name is `scr-local-bucket` (configurable via `AWS_BUCKET` in `.env`)
+ The default bucket name is `scr-private-bucket` (configurable via `AWS_BUCKET` in `.env`)
 - Floci data persists in a Docker volume, surviving container restarts
 - S3 endpoint is accessible from both Laravel containers (`backend` and `queue`)
 - For production, simply update the `.env` to use real AWS credentials and remove the `AWS_ENDPOINT` variable
@@ -410,9 +388,12 @@ local-docker/
 │   └── entrypoint.sh           # bootstrap Node.js + Socket.io if missing
 ├── postgres/
 │   └── init/001-init.sql        # pg_trgm, uuid-ossp, unaccent extensions
-└── logs/                        # host-visible nginx + php-fpm logs
-    ├── nginx/
-    └── php/
+├── scripts/
+│   ├── s3-init.sh               # creates private and public S3 buckets in Floci
+│   └── s3-list.sh               # lists all S3 buckets in Floci
+├── logs/                        # host-visible nginx + php-fpm logs
+│   ├── nginx/
+│   └── php/
 ```
 
 (Laravel's own `storage/logs/laravel.log` needs no entry here — it's already

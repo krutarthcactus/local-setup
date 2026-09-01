@@ -94,7 +94,9 @@ services:
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-test}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-test}"
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
-      AWS_BUCKET: "${AWS_BUCKET:-scr-local-bucket}"
+      AWS_BUCKET: "${AWS_BUCKET:-scr-private-bucket}"
+      AWS_BUCKET_PRIVATE: "${AWS_BUCKET_PRIVATE:-scr-private-bucket}"
+      AWS_BUCKET_PUBLIC: "${AWS_BUCKET_PUBLIC:-scr-public-bucket}"
       AWS_ENDPOINT: "${AWS_ENDPOINT:-http://floci:4566}"
       AWS_USE_PATH_STYLE_ENDPOINT: "${AWS_USE_PATH_STYLE_ENDPOINT:-true}"
     volumes:
@@ -211,6 +213,8 @@ services:
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-test}"
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
       AWS_BUCKET: "${AWS_BUCKET:-scr-local-bucket}"
+      AWS_BUCKET_PRIVATE: "${AWS_BUCKET_PRIVATE:-scr-private-bucket}"
+      AWS_BUCKET_PUBLIC: "${AWS_BUCKET_PUBLIC:-scr-public-bucket}"
     healthcheck:
       test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/localhost/4566' || exit 1"]
       interval: 10s
