@@ -28,6 +28,7 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./logs/nginx:/var/log/nginx
+      - ${BACKEND_PATH:-../../scr-backend}/storage/app/public:/var/www/html/storage/app/public:ro
     depends_on:
       - frontend
       - backend
@@ -130,18 +131,20 @@ services:
   # ---------------------------------------------------------------------------
   # queue — dedicated worker so reminders/reports/ingestion jobs actually
   # process (SOW §3.4/3.5 reminders, §3.3 ingestion, §5 report generation)
+  # Manages both Laravel Horizon and Redis stream consumer via Supervisor
   # ---------------------------------------------------------------------------
   queue:
     build: ./php
     container_name: scr-queue
     restart: unless-stopped
-    command: ["php", "artisan", "queue:work", "--tries=3", "--verbose"]
+    command: ["supervisord", "-c", "/docker/supervisor/supervisord.conf"]
     environment: *backend-env
     volumes:
       - ${BACKEND_PATH:-../../scr-backend}:/var/www/html
       - backend_vendor:/var/www/html/vendor
       - ./logs/php:/var/log/php
       - ./php/php.ini:/usr/local/etc/php/conf.d/zz-local-overrides.ini:ro
+      - ./php/supervisor/supervisord.conf:/docker/supervisor/supervisord.conf:ro
     depends_on:
       - backend
     networks:

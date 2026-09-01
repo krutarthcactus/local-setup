@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := help
 .PHONY: help up down restart build fresh logs logs-nginx logs-backend logs-frontend logs-queue \
         logs-websocket logs-floci ps shell-backend shell-frontend shell-websocket artisan npm npm-websocket migrate migrate-fresh \
-        tinker mailpit psql redis-cli hosts-check hosts-add s3-init s3-list s3-test up-only-websocket down-only-websocket
+        tinker mailpit psql redis-cli hosts-check hosts-add s3-init s3-list s3-test up-only-websocket down-only-websocket \
+        queue-stop queue-start queue-restart
 
 
 # =============================================================================
@@ -131,3 +132,16 @@ up-only-websocket: ## Start ONLY the websocket service (+ dependencies: none)
 
 down-only-websocket: ## Stop only the websocket service
 	docker compose down websocket
+
+# =============================================================================
+# Queue service management (Supervisor-based)
+# =============================================================================
+
+queue-stop: ## Stop all Supervisor-managed queue processes (Horizon + Redis consumer)
+	docker compose exec queue supervisorctl -c /docker/supervisor/supervisord.conf stop all
+
+queue-start: ## Start all Supervisor-managed queue processes
+	docker compose exec queue supervisorctl -c /docker/supervisor/supervisord.conf start all
+
+queue-restart: ## Restart all Supervisor-managed queue processes (for local testing)
+	docker compose exec queue supervisorctl -c /docker/supervisor/supervisord.conf restart all

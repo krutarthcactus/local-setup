@@ -19,6 +19,7 @@ RUN apk add --no-cache \
         linux-headers \
         libxml2-dev \
         curl-dev \
+        supervisor \
         $PHPIZE_DEPS
 
 # -----------------------------------------------------------------------------
