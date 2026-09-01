@@ -33,7 +33,7 @@ Laravel API.
 - The two application repos checked out **as siblings of this `SCR` repo**:
   ```
   ~/development/scr-backend/    (Laravel 13 — can be empty, gets bootstrapped)
-  ~/development/scr-frontend/   (Next.js 16 — can be empty, gets bootstrapped)
+  ~/development/scr-frontend/   (Next.js 16 — expects a real checkout, with package.json)
   ~/development/SCR/            (this repo — local-docker/ lives here)
   ```
   If your repos live somewhere else, edit `BACKEND_PATH` / `FRONTEND_PATH` in
@@ -113,8 +113,7 @@ make up
 
 **First boot does a lot of work automatically:**
 -- If `scr-backend/` is empty → runs `composer create-project laravel/laravel:^13.0`, adds `laravel/sanctum`, generates `.env`, wires DB/Redis/Mail config, generates `APP_KEY`, waits for Postgres, runs migrations.
--- If `scr-frontend/` is empty → runs `npx create-next-app@latest` with TypeScript, Tailwind, ESLint, App Router, installs Tanstack Query, Radix UI components, Socket.io client, and creates `.env.local` with environment variables for the Next.js app.
--- If `scr-websocket/` is empty → creates a Node.js 24 + TypeScript project with Socket.io, configures dev environment with `tsx`, and creates a basic WebSocket server with chat/message event handling.
+-- `scr-frontend/` and `scr-websocket/` are expected to already have their `package.json` checked out from GitHub — the entrypoint just copies `.env.sample` → `.env.local` / `.env` if one exists (falling back to built-in defaults otherwise) and runs `npm install`.
 
 This can take **2–5 minutes** the first time (composer/npm installs). Watch progress with:
 
@@ -404,10 +403,10 @@ local-docker/
 │   └── entrypoint.sh            # bootstrap Laravel 13 if missing, wire .env, migrate
 ├── node/
 │   ├── Dockerfile
-│   └── entrypoint.sh           # bootstrap Next.js if missing, patch next.config.js
+│   └── entrypoint.sh           # patch next.config.ts, wire .env.local, npm install
 ├── websocket/
 │   ├── Dockerfile             # Node.js 24 + TypeScript
-│   └── entrypoint.sh           # bootstrap Node.js + Socket.io if missing
+│   └── entrypoint.sh           # wire .env, npm install
 ├── postgres/
 │   └── init/001-init.sql        # pg_trgm, uuid-ossp, unaccent extensions
 └── logs/                        # host-visible nginx + php-fpm logs

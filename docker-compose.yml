@@ -31,6 +31,7 @@ services:
     depends_on:
       - frontend
       - backend
+      - websocket
     networks:
       - scr-local
 
@@ -42,9 +43,13 @@ services:
     container_name: scr-frontend
     restart: unless-stopped
     environment:
-      AUTO_BOOTSTRAP: "${AUTO_BOOTSTRAP:-true}"
+      # NEXT_PUBLIC_* app URLs intentionally NOT set here — Next.js's env
+      # loader always lets process.env win over .env.local, so anything
+      # listed in this block would silently override scr-frontend's own
+      # .env.sample/.env.local no matter what value you put there. Those
+      # keys live solely in scr-frontend/.env.sample now; only genuinely
+      # infra-level knobs belong in this block.
       APP_DOMAIN: "${APP_DOMAIN:-local.scr.com}"
-      NEXT_PUBLIC_API_BASE_URL: "http://${APP_DOMAIN:-local.scr.com}/api"
       CHOKIDAR_USEPOLLING: "true" # reliable file-watching across bind mounts
     volumes:
       - ${FRONTEND_PATH:-../../scr-frontend}:/app
@@ -65,10 +70,15 @@ services:
     container_name: scr-websocket
     restart: unless-stopped
     environment:
-      AUTO_BOOTSTRAP: "${AUTO_BOOTSTRAP:-true}"
       NODE_ENV: "${NODE_ENV:-development}"
       WEBSOCKET_PORT: "3000"
       WEBSOCKET_HOST: "0.0.0.0"
+      REDIS_URL: "redis://scr-redis:6379"
+      LARAVEL_BASE_URL: "http://172.17.0.1/api/v1"
+      REDIS_STREAMS_ENV: "local"
+      REDIS_STREAMS_PREFIX: "scr-stream"
+      REDIS_STREAMS_CONSUMER_STREAM: "node-to-core"
+      REDIS_STREAMS_DB: "2"
     volumes:
       - ${WEBSOCKET_PATH:-../../scr-websocket}:/app
       - websocket_node_modules:/app/node_modules
