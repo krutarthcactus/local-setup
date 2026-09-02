@@ -214,12 +214,21 @@ services:
     image: floci/floci:latest
     container_name: scr-floci
     restart: unless-stopped
+    # Grants the bind-mounted Docker socket group-write before Floci's own
+    # entrypoint drops from root to its unprivileged `floci` user — see
+    # floci/docker-entrypoint-wrapper.sh for why this is needed on this
+    # Docker Desktop version. Without it, the Floci UI sidecar and any
+    # Lambda/ECS/RDS emulation fail with "java.net.BindException:
+    # Permission denied" trying to reach the Docker Engine API.
+    entrypoint: ["/docker-entrypoint-wrapper.sh"]
     ports:
       - "${FLOCI_PORT:-4566}:4566"
     volumes:
       # Docker socket required by Floci for service emulation
       - /var/run/docker.sock:/var/run/docker.sock
       - floci_data:/app/data
+      - ./floci/docker-entrypoint-wrapper.sh:/docker-entrypoint-wrapper.sh:ro
+    user: root
     environment:
       FLOCI_STORAGE_MODE: "${FLOCI_STORAGE_MODE:-hybrid}"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-test}"
