@@ -21,6 +21,10 @@ BUCKET_PUBLIC=${AWS_BUCKET_PUBLIC:-scr-public-bucket}
 ENDPOINT="http://floci:4566"
 NETWORK="scr-local_scr-local"
 
+# Allows the frontend (a different origin/port than Floci's published 4566)
+# to read presigned-URL responses in the browser, e.g. the PDF viewer.
+CORS_CONFIG='{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag","Content-Length","Content-Range","Accept-Ranges"],"MaxAgeSeconds":3000}]}'
+
 echo "Creating S3 buckets..."
 echo "  Private: $BUCKET_PRIVATE"
 echo "  Public:  $BUCKET_PUBLIC"
@@ -41,6 +45,25 @@ docker run --rm --network "$NETWORK" \
     -e AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" \
     amazon/aws-cli --endpoint-url="$ENDPOINT" \
     s3 mb "s3://$BUCKET_PUBLIC" 2>&1 | grep -v "BucketAlreadyOwnedByYou" || echo "✓ Public bucket ready"
+
+echo ""
+echo "Configuring CORS on S3 buckets..."
+
+docker run --rm --network "$NETWORK" \
+    -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+    -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+    -e AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" \
+    amazon/aws-cli --endpoint-url="$ENDPOINT" \
+    s3api put-bucket-cors --bucket "$BUCKET_PRIVATE" --cors-configuration "$CORS_CONFIG" \
+    && echo "✓ Private bucket CORS configured"
+
+docker run --rm --network "$NETWORK" \
+    -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+    -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+    -e AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" \
+    amazon/aws-cli --endpoint-url="$ENDPOINT" \
+    s3api put-bucket-cors --bucket "$BUCKET_PUBLIC" --cors-configuration "$CORS_CONFIG" \
+    && echo "✓ Public bucket CORS configured"
 
 echo ""
 echo "✓ S3 buckets initialized successfully"

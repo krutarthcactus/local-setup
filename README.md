@@ -249,7 +249,15 @@ This creates two buckets:
 - `scr-private-bucket` - For sensitive files (documents, reports, etc.)
 - `scr-public-bucket` - For publicly accessible content (user uploads, avatars, etc.)
 
-Buckets persist in the `floci_data` Docker volume.
+It also applies a CORS policy (`AllowedOrigins: *`, `GET`/`HEAD`) to both
+buckets, so the browser can read presigned/temporary URLs directly — e.g.
+fetching a PDF (with `Range` requests) into a frontend viewer. Without this,
+requests to `http://localhost:4566/<bucket>/<key>?...` from `http://local.scr.com`
+are blocked by CORS. Real AWS S3 needs the equivalent bucket CORS policy in
+production (scoped to your real frontend origin, not `*`).
+
+Buckets persist in the `floci_data` Docker volume, so CORS only needs to be
+re-applied (`make s3-init`) if you recreate the volume (e.g. `make fresh`).
 
 #### Managing S3 buckets
 
@@ -282,6 +290,7 @@ make logs-floci
  The default bucket name is `scr-private-bucket` (configurable via `AWS_BUCKET` in `.env`)
 - Floci data persists in a Docker volume, surviving container restarts
 - S3 endpoint is accessible from both Laravel containers (`backend` and `queue`)
+- Bucket CORS (set by `make s3-init`) is what lets the browser fetch presigned URLs directly (e.g. PDF viewer) — see [scripts/s3-init.sh](scripts/s3-init.sh) if you need to change allowed origins/headers
 - For production, simply update the `.env` to use real AWS credentials and remove the `AWS_ENDPOINT` variable
 
 ---
