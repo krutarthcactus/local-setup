@@ -2,7 +2,7 @@
 .PHONY: help up down restart build fresh logs logs-nginx logs-backend logs-frontend logs-queue \
         logs-websocket logs-floci ps shell-backend shell-frontend shell-websocket artisan npm npm-websocket migrate migrate-fresh \
         tinker mailpit psql redis-cli hosts-check hosts-add s3-init s3-list s3-test up-only-websocket down-only-websocket \
-        queue-stop queue-start queue-restart
+        queue-stop queue-start queue-restart logs-pdf-lambda up-only-pdf-lambda pdf-lambda-deploy
 
 
 # =============================================================================
@@ -125,6 +125,16 @@ logs-floci: ## Tail Floci (AWS S3) logs
 # =============================================================================
 # Run only specific services
 # =============================================================================
+logs-pdf-lambda: ## Tail pdf-lambda (scr-pdf-lambda) container logs
+	docker compose logs -f pdf-lambda
+
+up-only-pdf-lambda: ## Start ONLY pdf-lambda (+ floci, which it depends on)
+	docker compose up -d --build pdf-lambda floci
+	@echo "✅ pdf-lambda is on http://localhost:$${PDF_LAMBDA_PORT:-9100}"
+
+pdf-lambda-deploy: ## Package scr-pdf-lambda and deploy it to the function hosted by Floci (needs host aws CLI)
+	cd $${PDF_LAMBDA_PATH:-../../scr-pdf-lambda} && npm run package && npm run deploy:local
+
 up-only-websocket: ## Start ONLY the websocket service (+ dependencies: none)
 	@echo "Starting only the websocket service..."
 	docker compose up -d --build websocket

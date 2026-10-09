@@ -34,7 +34,11 @@ services:
       - backend
       - websocket
     networks:
-      - scr-local
+      scr-local:
+        # Containers on this network (including Floci's Lambda containers) resolve the app
+        # domain to nginx. Without this, local.scr.com points to 127.0.0.1 inside them.
+        aliases:
+          - local.scr.com
 
   # ---------------------------------------------------------------------------
   # frontend — React 18 + Vite dev server (auto-bootstrapped if empty)
@@ -87,6 +91,39 @@ services:
       - scr-local
     ports:
       - "${WEBSOCKET_PORT:-3000}:3000"
+
+  # ---------------------------------------------------------------------------
+  # pdf-lambda — scr-pdf-lambda (cover page, annotations, merge, S3 upload)
+  # ---------------------------------------------------------------------------
+  # Built from the Lambda base image, so it runs the same runtime as the function
+  # Floci hosts. This container exposes the Runtime Interface Emulator on the host
+  # port below for direct invocation:
+  #   curl -XPOST localhost:${PDF_LAMBDA_PORT:-9100}/2015-03-31/functions/function/invocations -d @event.json
+  # Laravel invokes the deployed function through Floci's Lambda API at
+  # http://floci:4566, the same way production calls Lambda. Floci starts those
+  # function containers on this network.
+  pdf-lambda:
+    build: ${PDF_LAMBDA_PATH:-../../scr-pdf-lambda}
+    container_name: scr-pdf-lambda
+    restart: unless-stopped
+    environment:
+      APP_STAGE: "local"
+      # AWS_REGION is set automatically by Lambda in AWS and by Floci. The emulator needs it set here.
+      AWS_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-test}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-test}"
+      AWS_ENDPOINT_URL: "http://floci:4566"
+      S3_FORCE_PATH_STYLE: "true"
+      S3_BUCKET: "${AWS_BUCKET_PRIVATE:-scr-private-bucket}"
+      S3_KEY_PREFIX: "reviews/"
+      LOG_LEVEL: "debug"
+    ports:
+      - "${PDF_LAMBDA_PORT:-9100}:8080"
+    depends_on:
+      floci:
+        condition: service_healthy
+    networks:
+      - scr-local
 
   # ---------------------------------------------------------------------------
   # backend — Laravel 13 / PHP 8.4-fpm (auto-bootstrapped if empty)
@@ -231,6 +268,10 @@ services:
     user: root
     environment:
       FLOCI_STORAGE_MODE: "${FLOCI_STORAGE_MODE:-hybrid}"
+      # Floci returns URLs with this host, so other containers can reach it by name
+      FLOCI_HOSTNAME: "floci"
+      # Lambda function containers join this network, so they can reach floci:4566
+      FLOCI_SERVICES_LAMBDA_DOCKER_NETWORK: "scr-local"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-test}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-test}"
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
@@ -248,6 +289,8 @@ services:
 
 networks:
   scr-local:
+    # Fixed name, so FLOCI_SERVICES_LAMBDA_DOCKER_NETWORK can refer to it
+    name: scr-local
     driver: bridge
 
 volumes:

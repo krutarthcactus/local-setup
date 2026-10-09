@@ -20,6 +20,7 @@ Laravel API.
 | `backend`  | Laravel 13 on PHP 8.4-fpm                     | via nginx `/api/*` |
 | `queue`    | `php artisan queue:work` — processes reminders, reports, ingestion jobs | — |
 | `websocket` | Node.js 24 + TypeScript + Socket.io server   | `localhost:3000` |
+| `pdf-lambda` | scr-pdf-lambda on the Lambda base image (Runtime Interface Emulator) | `localhost:9100` (direct invoke) |
 | `postgres` | PostgreSQL 14 (matches SOW §2.3)              | `localhost:5432` |
 | `redis`    | Cache / session / queue driver                | `localhost:6379` |
 | `floci`    | AWS S3-compatible storage (all 75 AWS services) | `localhost:4566` |
@@ -91,6 +92,11 @@ git clone git@github.com:cactuscommunications/scr-frontend.git scr-frontend
 git clone git@github.com:cactuscommunications/scr-websocket.git scr-websocket
 ```
 
+#### Clone the PDF Lambda repository (SSH) - Optional
+```bash
+git clone git@github.com:cactuscommunications/scr-pdf-lambda.git scr-pdf-lambda
+```
+
 Your final directory structure should look like:
 ```
 ~/development/
@@ -98,6 +104,7 @@ Your final directory structure should look like:
 │   └── local-docker/    (this repository - already cloned)
 ├── scr-backend/         (Laravel application)
 ├── scr-frontend/        (Next.js application)
+├── scr-pdf-lambda/      (PDF Lambda - optional, runs in the pdf-lambda container)
 └── scr-websocket/       (Node.js WebSocket server - optional)
 ```
 
@@ -294,6 +301,19 @@ make logs-floci
 - For production, simply update the `.env` to use real AWS credentials and remove the `AWS_ENDPOINT` variable
 
 ---
+
+## PDF Lambda (scr-pdf-lambda)
+
+The PDF Lambda is built into the `pdf-lambda` container. The same code also runs as a function hosted by Floci.
+
+- **Standalone container:** `pdf-lambda` is built from `scr-pdf-lambda/Dockerfile` on the Lambda base image. Invoke it on the host:
+  ```bash
+  curl -XPOST localhost:9100/2015-03-31/functions/function/invocations -d @event.json
+  ```
+  The `pdf_url` in `event.json` must be presigned for `http://floci:4566`, which the container can reach. Presign it with `aws s3 presign ... --endpoint-url http://floci:4566`.
+- **Function hosted by Floci:** Laravel calls the function through Floci's Lambda API at `http://floci:4566`, the same way production calls Lambda. Floci starts each function container on the `scr-local` network. Create the function once, then deploy from the repo with `npm run deploy:local`. The steps are in `scr-pdf-lambda/README.md`.
+- **Floci settings:** `FLOCI_SERVICES_LAMBDA_DOCKER_NETWORK=scr-local` puts function containers on this network. `FLOCI_HOSTNAME=floci` makes Floci's URLs use the service name.
+- **App domain:** `local.scr.com` is an alias of `nginx` on the `scr-local` network. Logo URLs on the app domain resolve inside the function containers.
 
 ## Logs — accessible outside Docker
 
